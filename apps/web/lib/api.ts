@@ -454,17 +454,23 @@ export async function downloadDocument(
 export async function uploadFileToStorage(
   uploadUrl: string,
   file: File,
+  contentTypeOrProgress?: string | null | ((percent: number) => void),
   onProgress?: (percent: number) => void,
 ): Promise<void> {
+  const progressFn = typeof contentTypeOrProgress === "function" ? contentTypeOrProgress : onProgress;
+  const contentType = typeof contentTypeOrProgress === "string" && contentTypeOrProgress
+    ? contentTypeOrProgress
+    : (file.type || "application/octet-stream");
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", uploadUrl);
-    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.setRequestHeader("Content-Type", contentType);
 
-    if (onProgress) {
+    if (progressFn) {
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
+          progressFn(Math.round((e.loaded / e.total) * 100));
         }
       });
     }

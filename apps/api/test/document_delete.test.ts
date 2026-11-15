@@ -410,7 +410,10 @@ describe("DELETE /documents/:workspaceId/:documentId — Phase 11A Secure Docume
 
   describe("3. Worker Concurrency & Race Condition Protection", () => {
     it("processDocument worker aborts when document is in DELETING status without overwriting status", async () => {
-      const workerUrl = new URL("../../../workers/document-processing/src/processDocument.ts", import.meta.url).href;
+      const relPath = import.meta.url.includes("/dist/")
+        ? "../../../../workers/document-processing/src/processDocument.ts"
+        : "../../../workers/document-processing/src/processDocument.ts";
+      const workerUrl = new URL(relPath, import.meta.url).href;
       const { processDocument } = await import(workerUrl);
       const storageKey = `test/worker_race_${randomUUID()}.pdf`;
       const doc = await withWorkspaceContext(workspaceA, async (tx) => {

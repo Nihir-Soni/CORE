@@ -27,7 +27,7 @@ import { extractText } from "@core/extraction";
 import { downloadObjectBuffer } from "../lib/downloadObject.js";
 import { indexDocument } from "@core/indexing";
 import { GeminiProvider, createDefaultAIProvider, type AIProvider, searchHybridChunks, searchSimilarChunks, rerankSearchResults, buildRagContext, createRagSystemPrompt, mapCitations } from "@core/ai";
-import { retrievalSchema, chatSchema, env } from "@core/shared";
+import { retrievalSchema, chatSchema, env, ALLOWED_MIME_SET, resolveMimeType } from "@core/shared";
 import { documentProcessingQueue } from "@core/jobs";
 import { SSESession } from "../lib/sse.ts";
 
@@ -43,14 +43,7 @@ documentsRouter.use("/:workspaceId/multipart", multipartRouter);
 
 const MAX_SIZE_BYTES = 100 * 1024 * 1024;
 
-const ALLOWED_MIME = new Set([
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "image/png",
-    "image/jpeg",
-]);
+const ALLOWED_MIME = ALLOWED_MIME_SET;
 
 documentsRouter.post(
     "/:workspaceId/upload-url",
@@ -58,13 +51,15 @@ documentsRouter.post(
     requireWorkspaceRole("MEMBER"),
     async (req: AuthedRequest, res, next) => {
         try {
-            const { filename, mimeType, sizeBytes } = req.body;
+            let { filename, mimeType, sizeBytes } = req.body;
 
-            if (!ALLOWED_MIME.has(mimeType)) {
+            const resolvedMime = resolveMimeType(filename, mimeType);
+            if (!resolvedMime) {
                 return res.status(400).json({
                     error: "unsupported_file_type",
                 });
             }
+            mimeType = resolvedMime;
 
             if (
                 typeof sizeBytes !== "number" ||

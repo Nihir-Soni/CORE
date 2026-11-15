@@ -2,8 +2,9 @@ import { extractPdf } from "./pdf.js";
 import { extractDocx } from "./docx.js";
 import { extractPptx } from "./pptx.js";
 import { extractXlsx } from "./xlsx.js";
+import { extractImage } from "./image.js";
 
-export { extractPdf, extractDocx, extractPptx, extractXlsx };
+export { extractPdf, extractDocx, extractPptx, extractXlsx, extractImage };
 
 export * from "./ocr/tesseract.js";
 
@@ -25,6 +26,10 @@ const EXTRACTORS: Record<
 
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
         extractXlsx,
+
+    "image/png": (buf) => extractImage(buf, "image/png"),
+
+    "image/jpeg": (buf) => extractImage(buf, "image/jpeg"),
 };
 
 export async function extractText(

@@ -51,4 +51,12 @@ export type {
 
 export type {
     CreateWorkspaceInput,
-} from "./schemas/workspace.ts";
+} from "./schemas/workspace.ts";
+
+export {
+    ALLOWED_MIME_TYPES,
+    ALLOWED_MIME_SET,
+    resolveMimeType,
+    type AllowedMimeType,
+} from "./mime.ts";
+

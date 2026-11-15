@@ -8,6 +8,7 @@ import {
 } from "@core/storage";
 import * as storage from "@core/storage";
 import { documentProcessingQueue } from "@core/jobs";
+import { ALLOWED_MIME_SET, resolveMimeType } from "@core/shared";
 
 export const multipartRouter: Router = Router({ mergeParams: true });
 
@@ -51,14 +52,7 @@ export function resetMultipartStorageOps() {
     };
 }
 
-const ALLOWED_MIME = new Set([
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "image/png",
-    "image/jpeg",
-]);
+const ALLOWED_MIME = ALLOWED_MIME_SET;
 
 multipartRouter.post(
     "/initiate",
@@ -66,11 +60,13 @@ multipartRouter.post(
     requireWorkspaceRole("MEMBER"),
     async (req: AuthedRequest, res, next) => {
         try {
-            const { filename, mimeType, sizeBytes } = req.body;
+            let { filename, mimeType, sizeBytes } = req.body;
 
-            if (!ALLOWED_MIME.has(mimeType)) {
+            const resolvedMime = resolveMimeType(filename, mimeType);
+            if (!resolvedMime) {
                 return res.status(400).json({ error: "unsupported_file_type" });
             }
+            mimeType = resolvedMime;
 
             if (typeof sizeBytes !== "number" || sizeBytes <= 0) {
                 return res.status(400).json({ error: "invalid_file_size" });

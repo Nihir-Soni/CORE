@@ -29,6 +29,7 @@ import {
   completeMultipart,
   abortMultipart,
 } from "./api";
+import { resolveMimeType } from "./mime";
 import type { UploadedPart } from "./types";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -199,9 +200,10 @@ export async function runMultipartUpload(
     };
     onProgress?.(Object.freeze({ ...state, uploadedParts: new Map(state.uploadedParts) }));
 
+    const resolvedMime = resolveMimeType(file.name, file.type) || file.type || "application/octet-stream";
     const init = await initiateMultipart(workspaceId, {
       filename: file.name,
-      mimeType: file.type || "application/octet-stream",
+      mimeType: resolvedMime,
       sizeBytes: file.size,
     });
     state.sessionId = init.sessionId;

@@ -13,15 +13,9 @@ import {
   MULTIPART_THRESHOLD_BYTES,
   type MultipartUploadState,
 } from "@/lib/multipart-upload";
+import { resolveMimeType, ALLOWED_MIME_TYPES } from "@/lib/mime";
 
-const ALLOWED_TYPES = new Set([
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "image/png",
-  "image/jpeg",
-]);
+const ALLOWED_TYPES = ALLOWED_MIME_TYPES;
 
 // Single-PUT max (files below this use the old flow)
 const SINGLE_PUT_MAX_BYTES = MULTIPART_THRESHOLD_BYTES; // 100 MB
@@ -106,7 +100,8 @@ export function UploadDialog({
       setSelectedFile(null);
       return;
     }
-    if (!ALLOWED_TYPES.has(file.type)) {
+    const resolvedMime = resolveMimeType(file.name, file.type);
+    if (!resolvedMime) {
       setValidationError(
         "Unsupported file type. Supported: PDF, DOCX, PPTX, XLSX, PNG, JPEG",
       );
@@ -140,15 +135,17 @@ export function UploadDialog({
   async function handleSinglePutUpload(file: File) {
     setUploadState({ phase: "requesting" });
 
+    const mimeType = resolveMimeType(file.name, file.type) || file.type || "application/octet-stream";
+
     const { documentId, uploadUrl } = await requestUploadUrl(workspaceId, {
       filename: file.name,
-      mimeType: file.type,
+      mimeType,
       sizeBytes: file.size,
     });
 
     setUploadState({ phase: "uploading", progress: 0 });
 
-    await uploadFileToStorage(uploadUrl, file, (p) => {
+    await uploadFileToStorage(uploadUrl, file, mimeType, (p) => {
       setUploadState({ phase: "uploading", progress: p });
     });
 
