@@ -445,11 +445,19 @@ export function ChatBox({
                 {message.role === "user" ? (
                   message.text
                 ) : message.text ? (
-                  <FormattedMessage
-                    text={message.text}
-                    citations={message.citations}
-                    onCitationClick={(citation, index) => setActiveCitation({ citation, index })}
-                  />
+                  <div>
+                    <FormattedMessage
+                      text={message.text}
+                      citations={message.citations}
+                      onCitationClick={(citation, index) => setActiveCitation({ citation, index })}
+                    />
+                    {isWorking && (message.id === activeAssistantId || (!activeAssistantId && message === renderedMessages[renderedMessages.length - 1])) && (
+                      <span
+                        className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--accent)] animate-pulse rounded-xs align-baseline"
+                        aria-label="Streaming..."
+                      />
+                    )}
+                  </div>
                 ) : (message.id === activeAssistantId || (!message.text && isWorking)) ? (
                   <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
                     <span className="inline-block w-2 h-2 rounded-full bg-[var(--accent)] animate-ping" />

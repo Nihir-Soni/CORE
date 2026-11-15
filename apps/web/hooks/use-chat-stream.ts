@@ -165,6 +165,8 @@ export function useChatStream() {
               } catch {
                 // Ignore malformed JSON token payload
               }
+            } else if (ev.event === "status") {
+              safeSetState((prev) => ({ ...prev, status: "streaming" }));
             } else if (ev.event === "citations") {
               try {
                 const parsed = JSON.parse(ev.data);

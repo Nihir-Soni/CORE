@@ -610,6 +610,8 @@ documentsRouter.post(
   requireAuth,
   requireWorkspaceRole("MEMBER"),
   async (req: AuthedRequest, res, next) => {
+    let isStreaming = false;
+    let sse: SSESession | null = null;
     try {
       const workspaceId = typeof req.params.workspaceId === "string"
         ? req.params.workspaceId
@@ -622,9 +624,10 @@ documentsRouter.post(
       }
 
       const { query, topK, stream, mode, maxTokens, rerank, documentIds } = parseResult.data;
-      const isStreaming = stream === true;
+      isStreaming = stream === true;
+      sse = isStreaming ? new SSESession(req, res) : null;
 
-      console.log(`[DIAGNOSTIC] === CHAT START === Query: "${query}"`);
+      console.log(`[DIAGNOSTIC] === CHAT START === Query: "${query}" (streaming: ${isStreaming})`);
 
       // 2. Resolve Provider
       let provider = aiProvider;
@@ -633,6 +636,11 @@ documentsRouter.post(
           provider = createDefaultAIProvider();
         } catch (e) {
           console.error("[DIAGNOSTIC] Provider resolution failed:", e);
+          if (isStreaming && sse) {
+            sse.send({ event: "error", data: { message: "AI provider unconfigured" } });
+            sse.close();
+            return;
+          }
           return res.status(500).json({ error: "ai_provider_unconfigured" });
         }
       }
@@ -666,8 +674,7 @@ documentsRouter.post(
       if (results.length === 0) {
         console.log(`[DIAGNOSTIC] Retrieval results empty, returning fallback text.`);
         const fallbackText = "I couldn't find enough information in the available documents to answer that question.";
-        if (isStreaming) {
-          const sse = new SSESession(req, res);
+        if (isStreaming && sse) {
           sse.send({ event: "token", data: { text: fallbackText } });
           sse.send({ event: "citations", data: { citations: [] } });
           sse.send({ event: "complete", data: {} });
@@ -695,8 +702,7 @@ documentsRouter.post(
       const userPrompt = `User question:\n${query}\n\nRetrieved context:\n${context}`;
 
       // 6. Handle SSE Streaming Chat
-      if (isStreaming) {
-        const sse = new SSESession(req, res);
+      if (isStreaming && sse) {
         let fullAnswer = "";
         let streamStage = "provider_stream";
 
@@ -822,6 +828,14 @@ documentsRouter.post(
         sources,
       });
     } catch (err) {
+      if (isStreaming && sse && !sse.isClosed()) {
+        sse.send({
+          event: "error",
+          data: { message: "Unable to generate a response" },
+        });
+        sse.close();
+        return;
+      }
       next(err);
     }
   }

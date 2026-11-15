@@ -32,9 +32,18 @@ export class FallbackAIProvider implements AIProvider {
   }
 
   async chat(input: ChatInput): Promise<string> {
+    let timer: NodeJS.Timeout | null = null;
     try {
-      return await this.primary.chat(input);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error("Primary provider timed out waiting for response (8000ms)"));
+        }, 8000);
+      });
+      const result = await Promise.race([this.primary.chat(input), timeoutPromise]);
+      if (timer) clearTimeout(timer);
+      return result;
     } catch (primaryError) {
+      if (timer) clearTimeout(timer);
       this.logFallback(primaryError, "chat");
       try {
         return await this.fallback.chat(input);
@@ -57,13 +66,21 @@ export class FallbackAIProvider implements AIProvider {
     let primaryError: unknown = null;
 
     if (this.primary.chatStream) {
+      let timer: NodeJS.Timeout | null = null;
       try {
         const stream = this.primary.chatStream(input);
         primaryIterator = stream[Symbol.asyncIterator]();
-        // Probe the first token to catch immediate failures (rate limits, 429, 503, connection errors)
-        firstChunk = await primaryIterator.next();
+        // Probe the first token to catch immediate failures (rate limits, 429, 503, connection errors, hanging)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error("Primary provider timed out waiting for first token (6000ms)"));
+          }, 6000);
+        });
+        firstChunk = await Promise.race([primaryIterator.next(), timeoutPromise]);
+        if (timer) clearTimeout(timer);
         startedPrimary = true;
       } catch (err) {
+        if (timer) clearTimeout(timer);
         primaryError = err;
         this.logFallback(err, "chatStream");
       }

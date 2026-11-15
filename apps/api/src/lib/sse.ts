@@ -31,6 +31,9 @@ export class SSESession {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
+    // Disable Nagle's algorithm for instantaneous packet delivery
+    req.socket?.setNoDelay?.(true);
+
     // Flush headers if supported (e.g. compression / proxy middleware)
     if (typeof (res as any).flushHeaders === "function") {
       (res as any).flushHeaders();
@@ -78,6 +81,9 @@ export class SSESession {
       output += "\n";
 
       this.res.write(output);
+      if (typeof (this.res as any).flush === "function") {
+        (this.res as any).flush();
+      }
       return true;
     } catch {
       this.close();

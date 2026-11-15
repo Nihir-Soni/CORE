@@ -1061,7 +1061,7 @@ workspacesRouter.get(
                             ? Math.round(((chunkAgg._count || 0) / totalDocuments) * 10) / 10
                             : 0,
                         embeddingModel: "gemini-embedding-001 (768-dim)",
-                        chatModel: env.GEMINI_CHAT_MODEL || "gemini-3.8-flash",
+                        chatModel: env.GEMINI_CHAT_MODEL || "gemini-3.5-flash",
                     },
                     queryStats: {
                         totalAuditEvents,
