@@ -1,0 +1,23 @@
+{
+  "name": "@core/indexing",
+  "version": "1.0.0",
+  "description": "CHiE Document Indexing Orchestration",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --env-file=../../.env --test dist/test/*.test.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "@core/database": "workspace:*",
+    "@core/chunking": "workspace:*",
+    "@core/ai": "workspace:*",
+    "@core/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  }
+}

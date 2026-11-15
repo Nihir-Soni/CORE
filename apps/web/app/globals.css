@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ─── MinIO Console Design System ───────────────────────────────────────────── */
+:root {
+  /* Sidebar — MinIO deep navy */
+  --sidebar-bg:       #081C42;
+  --sidebar-text:     #C5CBDA;
+  --sidebar-active:   #C83B51;
+  --sidebar-hover:    rgba(255,255,255,0.06);
+  --sidebar-divider:  rgba(255,255,255,0.08);
+  --sidebar-width:    240px;
+
+  /* Header */
+  --header-bg:        #ffffff;
+  --header-border:    #E5E8EF;
+  --header-height:    52px;
+
+  /* Page background */
+  --bg-page:          #F4F4F4;
+  --bg-surface:       #ffffff;
+  --bg-surface-2:     #F8F9FB;
+
+  /* Borders */
+  --border-color:     #E5E8EF;
+  --border-subtle:    #F0F2F5;
+
+  /* Text */
+  --text-primary:     #07193E;
+  --text-secondary:   #5A6170;
+  --text-muted:       #9BA1AF;
+  --text-white:       #ffffff;
+
+  /* MinIO brand red */
+  --accent:           #C83B51;
+  --accent-hover:     #AD2F44;
+  --accent-light:     #FDF1F3;
+  --accent-border:    #F4C4CC;
+
+  /* Status colors */
+  --status-ready:     #2ECC71;
+  --status-ready-bg:  #EAFAF1;
+  --status-upload:    #F39C12;
+  --status-upload-bg: #FEF9E7;
+  --status-process:   #3498DB;
+  --status-process-bg:#EBF5FB;
+  --status-failed:    #E74C3C;
+  --status-failed-bg: #FDEDEC;
+  --status-default:   #5A6170;
+  --status-default-bg:#F0F2F5;
+
+  /* Input */
+  --input-bg:         #ffffff;
+  --input-border:     #C4C8D1;
+  --input-border-focus: #C83B51;
+  --input-radius:     4px;
+
+  /* Button */
+  --btn-radius:       4px;
+
+  /* Shadow */
+  --shadow-card:      0 1px 3px rgba(0,0,0,0.08);
+}
+
+@theme inline {
+  --color-background: var(--bg-page);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ─── Base reset ──────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans, 'Inter', system-ui, sans-serif);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Focus ───────────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C4C8D1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9BA1AF; }

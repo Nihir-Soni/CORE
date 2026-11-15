@@ -1,0 +1,275 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum DocumentStatus {
+  UPLOADING
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+  DELETING
+}
+
+enum UploadSessionStatus {
+  INITIATED
+  COMPLETING
+  COMPLETED
+  ABORTED
+  FAILED
+}
+
+enum ProcessingJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum AuditAction {
+  DOCUMENT_UPLOADED
+  DOCUMENT_DOWNLOADED
+  DOCUMENT_DELETED
+  MEMBER_INVITED
+  ROLE_CHANGED
+}
+
+model Organization {
+  id         String      @id @default(cuid())
+  name       String
+  createdAt  DateTime    @default(now())
+  workspaces Workspace[]
+  users      User[]
+
+  @@map("organizations")
+}
+
+model Workspace {
+  id            String       @id @default(cuid())
+  orgId         String
+  name          String
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  memberships   Membership[]
+  invitations   Invitation[]
+  documents     Document[]
+  chunks        Chunk[]
+  processingJobs ProcessingJob[]
+  uploadSessions UploadSession[]
+  auditLogs     AuditLog[]
+  @@index([orgId])
+  @@map("workspaces")
+}
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  name            String?
+  orgId           String
+  organization    Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  memberships     Membership[]
+  sentInvitations Invitation[]   @relation("InvitedByUser")
+  refreshTokens   RefreshToken[]
+  documents       Document[]
+  auditLogs       AuditLog[]
+
+  @@index([orgId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Membership {
+  userId      String
+  workspaceId String
+  role        Role      @default(MEMBER)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        Role             @default(MEMBER)
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  invitedById String
+  invitedBy   User             @relation("InvitedByUser", fields: [invitedById], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([status])
+  @@map("invitations")
+}
+
+model Document {
+  id           String          @id @default(cuid())
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id])
+  workspaceId  String
+  uploadedBy   User            @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String          @unique
+  sha256       String?
+  status       DocumentStatus  @default(UPLOADING)
+  createdAt    DateTime        @default(now())
+
+  content      DocumentContent?
+  chunks       Chunk[]
+  processingJobs ProcessingJob[]
+  uploadSession  UploadSession?
+
+  @@index([workspaceId])
+  @@index([sha256])
+  @@unique([workspaceId, sha256])
+}
+
+model UploadSession {
+  id            String             @id @default(cuid())
+  documentId    String             @unique
+  workspaceId   String
+  uploadId      String
+  storageKey    String
+  filename      String
+  mimeType      String
+  sizeBytes     BigInt
+  partSizeBytes Int
+  totalParts    Int
+  status        UploadSessionStatus @default(INITIATED)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  completedAt   DateTime?
+
+  document      Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workspace     Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([uploadId])
+  @@map("upload_sessions")
+}
+
+model DocumentContent {
+  id          String   @id @default(cuid())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId  String   @unique
+  text        String
+  pageCount   Int?
+  charCount   Int
+  extractedAt DateTime @default(now())
+}
+
+model Chunk {
+  id          String   @id @default(cuid())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId  String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  content     String
+  pageNumber  Int?
+  chunkIndex  Int
+  tokenCount  Int
+  createdAt   DateTime @default(now())
+
+  embedding   ChunkEmbedding?
+
+  @@index([documentId])
+  @@index([workspaceId])
+  @@unique([documentId, chunkIndex])
+  @@map("chunks")
+}
+
+model ChunkEmbedding {
+  id        String                   @id @default(cuid())
+  chunk     Chunk                    @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  chunkId   String                   @unique
+  /// vector(768) — gemini-embedding-001, L2-normalised before storage
+  embedding Unsupported("vector(768)")
+
+  @@map("chunk_embeddings")
+}
+
+model ProcessingJob {
+  id             String             @id @default(cuid())
+  documentId     String
+  workspaceId    String
+  status         ProcessingJobStatus @default(QUEUED)
+  attempts       Int                @default(0)
+  progress       Int                @default(0)
+  progressMessage String?
+  lastError      String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  document       Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([documentId])
+  @@index([status])
+  @@map("processing_jobs")
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action       AuditAction
+  resourceId   String?
+  resourceName String?
+  details      Json?
+  createdAt    DateTime    @default(now())
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

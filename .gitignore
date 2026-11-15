@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.turbo/
+.next/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Generated Prisma client
+packages/database/src/generated/prisma/
+
+# Scratch & diagnostic scripts
+scratch/
