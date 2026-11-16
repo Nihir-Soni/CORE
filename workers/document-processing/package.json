@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/worker.ts",
+    "build": "tsc",
+    "start": "node dist/src/worker.js",
     "enqueue-test": "tsx --env-file=../../.env scripts/enqueue-test.ts",
     "test": "tsx --env-file=../../.env --test test/**/*.test.ts"
   },

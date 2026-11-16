@@ -15,7 +15,7 @@ flowchart TD
     end
 
     subgraph API ["API & Routing Layer"]
-        Fastify["Fastify REST & SSE Server<br/>(JWT, RBAC, RLS Context)"]
+        Express["Express 5 REST & SSE Server<br/>(JWT, RBAC, RLS Context)"]
     end
 
     subgraph StorageInfra ["Storage & Message Broker"]
@@ -30,14 +30,14 @@ flowchart TD
     end
 
     Web -->|"Direct Presigned PUT / GET"| MinIO
-    Web -->|"REST API & SSE Streams"| Fastify
-    Fastify -->|"Database Queries & Vector Search"| Postgres
-    Fastify -->|"Enqueue Processing Jobs"| Redis
+    Web -->|"REST API & SSE Streams"| Express
+    Express -->|"Database Queries & Vector Search"| Postgres
+    Express -->|"Enqueue Processing Jobs"| Redis
     Redis -->|"Consume Ingestion Tasks"| Worker
     Worker -->|"Stream File & Extract"| MinIO
     Worker -->|"Chunk & Embed"| AI
     Worker -->|"Persist Chunks & Embeddings"| Postgres
-    Fastify -->|"RAG Hybrid Retrieval & Streaming Chat"| AI
+    Express -->|"RAG Hybrid Retrieval & Streaming Chat"| AI
 ```
 
 ---
@@ -207,8 +207,37 @@ pnpm dev
 
 The services will be accessible at:
 - **Web Console**: [http://localhost:3000](http://localhost:3000)
-- **Fastify API**: [http://localhost:4000](http://localhost:4000)
+- **API Server**: [http://localhost:4000](http://localhost:4000)
 - **MinIO Console**: [http://localhost:9001](http://localhost:9001) (`core` / `coreminio`)
+
+---
+
+## Production Deployment
+
+CORE is architected for zero-friction containerized deployment:
+
+### 1. Quick Launch with Docker Compose (Single Server / VPS)
+```bash
+# Clone the repository
+git clone https://github.com/Nihir-Soni/CORE.git
+cd CORE
+
+# Setup environment variables
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY, JWT_SECRET, and domain origins
+
+# Launch all production services (PostgreSQL + pgvector, Redis, MinIO, API, Worker, Web)
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### 2. Multi-Cloud & PaaS (Railway / Render / Fly.io / Vercel)
+CORE supports containerized deployment on any modern cloud platform:
+* **Web (`apps/web`)**: Deploy to Vercel or as a Docker container (`Dockerfile.web`).
+* **API (`apps/api`)**: Deploy as a container (`Dockerfile.api`) with auto-scaling.
+* **Worker (`workers/document-processing`)**: Deploy as a background worker daemon (`Dockerfile.worker`).
+* **Databases**: Compatible with Neon, Supabase, AWS RDS (PostgreSQL with `pgvector`), Upstash Redis, and AWS S3 / Cloudflare R2.
+
+For in-depth step-by-step instructions, see the complete [Deployment Guide](DEPLOYMENT.md).
 
 ---
 

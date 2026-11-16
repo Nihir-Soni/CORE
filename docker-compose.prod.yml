@@ -1,0 +1,160 @@
+version: "3.8"
+
+services:
+  # ─── Database with pgvector ─────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: core-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-core}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-core}
+      POSTGRES_DB: ${POSTGRES_DB:-core}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-core} -d ${POSTGRES_DB:-core}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis Queue & PubSub ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: core-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── S3 Compatible Storage (MinIO) ─────────────────────────────────────────
+  minio:
+    image: minio/minio
+    container_name: core-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-core}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-coreminio}
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Database Migration Runner (Runs Once at Startup) ──────────────────────
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: core-db-migrate
+    command: ["pnpm", "--filter", "@core/database", "deploy"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://core:core@postgres:5432/core?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:-core-super-secret-jwt-key-minimum-32-chars-long}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ─── CORE Backend API ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: core-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://core:core@postgres:5432/core?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:-core-super-secret-jwt-key-minimum-32-chars-long}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-core}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-coreminio}
+      S3_BUCKET: ${S3_BUCKET:-chie-documents}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-3.5-flash}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_CHAT_MODEL: ${MISTRAL_CHAT_MODEL:-open-mistral-7b}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+
+  # ─── Document Ingestion & RAG Worker ───────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: core-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://core:core@postgres:5432/core?sslmode=disable}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-core}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-coreminio}
+      S3_BUCKET: ${S3_BUCKET:-chie-documents}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-3.5-flash}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_CHAT_MODEL: ${MISTRAL_CHAT_MODEL:-open-mistral-7b}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+
+  # ─── Next.js Frontend Web UI ───────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    container_name: core-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
+    "deploy": "prisma migrate deploy",
     "test": "tsc -p tsconfig.test.json && node --env-file=../../.env --test dist/test/repositories.test.js dist/test/rls.test.js dist/test/phase9_3_verification.test.js"
   },
   "keywords": [],

@@ -11,10 +11,16 @@ import { defaultEventsRouter } from "./routes/events.ts";
 import { invitationsRouter } from "./routes/invitation.ts";
 
 
+const port = Number(process.env.PORT) || 4000;
+const allowedOriginEnv = process.env.CORS_ORIGIN || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const allowedOrigins = allowedOriginEnv.includes(",")
+  ? allowedOriginEnv.split(",").map((s) => s.trim())
+  : allowedOriginEnv;
+
 export const app: express.Application = express();
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: allowedOrigins,
     credentials: true,
   }),
 );
@@ -37,8 +43,6 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   console.error(err);
   res.status(500).json({ error: "internal_error" });
 });
-
-const port = 4000;
 
 const isTestMode = process.env.NODE_ENV === "test" || process.argv.some((arg) => arg.includes("test"));
 
