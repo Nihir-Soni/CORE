@@ -9,6 +9,7 @@ const envSchema = z.object({
   MISTRAL_CHAT_MODEL: z.string().optional().default("open-mistral-7b"),
   REDIS_HOST: z.string().default("localhost"),
   REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_URL: z.string().url().optional(),
 });
 
 export const env = envSchema.parse(process.env);
