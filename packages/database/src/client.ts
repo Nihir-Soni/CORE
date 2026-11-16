@@ -29,14 +29,21 @@ export async function disconnectDatabase() {
   await prisma.$disconnect();
 }
 
+
 export async function withWorkspaceContext<T>(
   workspaceId: string,
   callback: (db: Prisma.TransactionClient, ctx: WorkspaceContext) => Promise<T>,
 ): Promise<T> {
   if (!workspaceId) throw new Error("workspaceId is required");
 
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.workspace_id', ${workspaceId}, true)`;
-    return callback(tx, { workspaceId, db: tx });
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.workspace_id', ${workspaceId}, true)`;
+      return callback(tx, { workspaceId, db: tx });
+    },
+    {
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  );
 }
