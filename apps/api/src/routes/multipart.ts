@@ -8,6 +8,7 @@ import {
 } from "@core/storage";
 import * as storage from "@core/storage";
 import { documentProcessingQueue } from "@core/jobs";
+import { dispatchDocumentProcessingWorkflow } from "../lib/githubActions.ts";
 import { ALLOWED_MIME_SET, resolveMimeType } from "@core/shared";
 
 export const multipartRouter: Router = Router({ mergeParams: true });
@@ -378,6 +379,9 @@ multipartRouter.post(
 
                     return res.status(500).json({ error: "queue_error" });
                 }
+                await dispatchDocumentProcessingWorkflow({
+                    documentId: updatedDoc!.id,
+                });
             }
 
             await recordAuditLog({

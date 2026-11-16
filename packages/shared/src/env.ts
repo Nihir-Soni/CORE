@@ -10,6 +10,7 @@ const envSchema = z.object({
   REDIS_HOST: z.string().default("localhost"),
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_URL: z.string().url().optional(),
+  GITHUB_ACTIONS_TOKEN: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse(process.env);

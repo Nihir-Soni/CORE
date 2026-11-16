@@ -1,23 +1,23 @@
 import { Router } from "express";
 
 import {
-    prisma,
-    DocumentRepository,
-    DocumentContentRepository,
-    ChunkEmbeddingRepository,
-    ProcessingJobRepository,
+  prisma,
+  DocumentRepository,
+  DocumentContentRepository,
+  ChunkEmbeddingRepository,
+  ProcessingJobRepository,
 } from "@core/database";
 import {
-    buildStorageKey,
-    presignUpload,
-    presignDownload,
-    getObjectStream,
-    deleteObject,
+  buildStorageKey,
+  presignUpload,
+  presignDownload,
+  getObjectStream,
+  deleteObject,
 } from "@core/storage";
-
+import { dispatchDocumentProcessingWorkflow } from "../lib/githubActions.ts";
 import {
-    requireAuth,
-    type AuthedRequest,
+  requireAuth,
+  type AuthedRequest,
 } from "../middleware/requireAuth.ts";
 
 import { requireWorkspaceRole } from "../middleware/requireWorkspaceRole.ts";
@@ -33,7 +33,7 @@ import { SSESession } from "../lib/sse.ts";
 
 let aiProvider: AIProvider | undefined;
 export function setAIProvider(provider: AIProvider | undefined) {
-    aiProvider = provider;
+  aiProvider = provider;
 }
 
 export const documentsRouter: Router = Router();
@@ -46,230 +46,233 @@ const MAX_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_MIME = ALLOWED_MIME_SET;
 
 documentsRouter.post(
-    "/:workspaceId/upload-url",
-    requireAuth,
-    requireWorkspaceRole("MEMBER"),
-    async (req: AuthedRequest, res, next) => {
-        try {
-            let { filename, mimeType, sizeBytes } = req.body;
+  "/:workspaceId/upload-url",
+  requireAuth,
+  requireWorkspaceRole("MEMBER"),
+  async (req: AuthedRequest, res, next) => {
+    try {
+      let { filename, mimeType, sizeBytes } = req.body;
 
-            const resolvedMime = resolveMimeType(filename, mimeType);
-            if (!resolvedMime) {
-                return res.status(400).json({
-                    error: "unsupported_file_type",
-                });
-            }
-            mimeType = resolvedMime;
+      const resolvedMime = resolveMimeType(filename, mimeType);
+      if (!resolvedMime) {
+        return res.status(400).json({
+          error: "unsupported_file_type",
+        });
+      }
+      mimeType = resolvedMime;
 
-            if (
-                typeof sizeBytes !== "number" ||
-                sizeBytes <= 0
-            ) {
-                return res.status(400).json({
-                    error: "invalid_file_size",
-                });
-            }
+      if (
+        typeof sizeBytes !== "number" ||
+        sizeBytes <= 0
+      ) {
+        return res.status(400).json({
+          error: "invalid_file_size",
+        });
+      }
 
-            if (sizeBytes > MAX_SIZE_BYTES) {
-                return res.status(400).json({
-                    error: "file_too_large",
-                });
-            }
+      if (sizeBytes > MAX_SIZE_BYTES) {
+        return res.status(400).json({
+          error: "file_too_large",
+        });
+      }
 
-            if (
-                typeof filename !== "string" ||
-                filename.trim().length === 0
-            ) {
-                return res.status(400).json({
-                    error: "invalid_filename",
-                });
-            }
+      if (
+        typeof filename !== "string" ||
+        filename.trim().length === 0
+      ) {
+        return res.status(400).json({
+          error: "invalid_filename",
+        });
+      }
 
-            const rawWorkspaceId = req.params.workspaceId;
-            const workspaceId = Array.isArray(rawWorkspaceId)
-                ? rawWorkspaceId[0]
-                : rawWorkspaceId;
+      const rawWorkspaceId = req.params.workspaceId;
+      const workspaceId = Array.isArray(rawWorkspaceId)
+        ? rawWorkspaceId[0]
+        : rawWorkspaceId;
 
-            const storageKey = buildStorageKey(
-                workspaceId,
-                filename,
-            );
+      const storageKey = buildStorageKey(
+        workspaceId,
+        filename,
+      );
 
-            const document = await DocumentRepository.create(
-                { workspaceId },
-                {
-                    uploadedById: req.user!.userId,
-                    filename,
-                    mimeType,
-                    sizeBytes,
-                    storageKey,
-                    status: "UPLOADING",
-                }
-            );
-
-            const uploadUrl = await presignUpload(
-                storageKey,
-                mimeType,
-            );
-
-            return res.status(201).json({
-                documentId: document.id,
-                uploadUrl,
-            });
-        } catch (err) {
-            next(err);
+      const document = await DocumentRepository.create(
+        { workspaceId },
+        {
+          uploadedById: req.user!.userId,
+          filename,
+          mimeType,
+          sizeBytes,
+          storageKey,
+          status: "UPLOADING",
         }
-    },
+      );
+
+      const uploadUrl = await presignUpload(
+        storageKey,
+        mimeType,
+      );
+
+      return res.status(201).json({
+        documentId: document.id,
+        uploadUrl,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 );
 
 documentsRouter.post(
-    "/:workspaceId/:documentId/complete",
-    requireAuth,
-    requireWorkspaceRole("MEMBER"),
-    async (
-        req: AuthedRequest,
-        res,
-        next,
-    ) => {
-        try {
-            const workspaceId = req.params.workspaceId as string;
-            const documentId = req.params.documentId as string;
-            const ctx = { workspaceId };
+  "/:workspaceId/:documentId/complete",
+  requireAuth,
+  requireWorkspaceRole("MEMBER"),
+  async (
+    req: AuthedRequest,
+    res,
+    next,
+  ) => {
+    try {
+      const workspaceId = req.params.workspaceId as string;
+      const documentId = req.params.documentId as string;
+      const ctx = { workspaceId };
 
-            const document = await DocumentRepository.findById(ctx, documentId);
+      const document = await DocumentRepository.findById(ctx, documentId);
 
-            if (!document) {
-                return res.status(404).json({
-                    error: "not_found",
-                });
-            }
+      if (!document) {
+        return res.status(404).json({
+          error: "not_found",
+        });
+      }
 
-            let sha256: string;
-            try {
-                sha256 = await hashStoredObject(document.storageKey);
-            } catch (hashErr) {
-                console.error(`Hashing failed for document ${document.id}:`, hashErr);
-                await DocumentRepository.update(ctx, document.id, { status: "FAILED" }).catch(e => console.error(e));
+      let sha256: string;
+      try {
+        sha256 = await hashStoredObject(document.storageKey);
+      } catch (hashErr) {
+        console.error(`Hashing failed for document ${document.id}:`, hashErr);
+        await DocumentRepository.update(ctx, document.id, { status: "FAILED" }).catch(e => console.error(e));
 
-                return res.status(500).json({ error: "hashing_failed" });
-            }
+        return res.status(500).json({ error: "hashing_failed" });
+      }
 
-            const existingDoc = await DocumentRepository.findBySha256(ctx, sha256, document.id);
+      const existingDoc = await DocumentRepository.findBySha256(ctx, sha256, document.id);
 
-            if (existingDoc) {
-                await deleteObject(document.storageKey).catch(e => console.error("Failed to delete duplicate S3 object:", e));
-                await DocumentRepository.delete(ctx, document.id).catch(e => console.error(e));
+      if (existingDoc) {
+        await deleteObject(document.storageKey).catch(e => console.error("Failed to delete duplicate S3 object:", e));
+        await DocumentRepository.delete(ctx, document.id).catch(e => console.error(e));
 
-                return res.json({
-                    duplicate: true,
-                    documentId: existingDoc.id,
-                    canonicalDocumentId: existingDoc.id,
-                    status: existingDoc.status,
-                    sha256: existingDoc.sha256,
-                });
-            }
+        return res.json({
+          duplicate: true,
+          documentId: existingDoc.id,
+          canonicalDocumentId: existingDoc.id,
+          status: existingDoc.status,
+          sha256: existingDoc.sha256,
+        });
+      }
 
-            let updated: any;
-            try {
-                updated = await DocumentRepository.update(ctx, document.id, {
-                    sha256,
-                    status: "UPLOADED",
-                });
-            } catch (dbErr: any) {
-                if (dbErr?.code === "P2002") {
-                    const canonical = await DocumentRepository.findBySha256(ctx, sha256, document.id);
+      let updated: any;
+      try {
+        updated = await DocumentRepository.update(ctx, document.id, {
+          sha256,
+          status: "UPLOADED",
+        });
+      } catch (dbErr: any) {
+        if (dbErr?.code === "P2002") {
+          const canonical = await DocumentRepository.findBySha256(ctx, sha256, document.id);
 
-                    if (canonical) {
-                        await deleteObject(document.storageKey).catch(e => console.error(e));
-                        await DocumentRepository.delete(ctx, document.id).catch(e => console.error(e));
-
-                        return res.json({
-                            duplicate: true,
-                            documentId: canonical.id,
-                            canonicalDocumentId: canonical.id,
-                            status: canonical.status,
-                            sha256: canonical.sha256,
-                        });
-                    }
-                }
-                throw dbErr;
-            }
-
-            let processingJob;
-            try {
-                processingJob = await ProcessingJobRepository.create(ctx, {
-                    documentId: updated.id,
-                    status: "QUEUED",
-                    progress: 0,
-                    progressMessage: "Job queued",
-                });
-            } catch (err) {
-                console.error(`Failed to create ProcessingJob for document ${updated.id}:`, err);
-                return res.status(500).json({
-                    error: "internal_error",
-                });
-            }
-
-            try {
-                await documentProcessingQueue.add("process-document", {
-                    documentId: updated.id,
-                    workspaceId: updated.workspaceId,
-                    processingJobId: processingJob.id,
-                }, {
-                    jobId: processingJob.id,
-                });
-            } catch (err) {
-                console.error(`Failed to enqueue job for document ${updated.id}:`, err);
-                // Clean up the processing job if enqueue failed
-                await ProcessingJobRepository.update(ctx, processingJob.id, {
-                    status: "FAILED",
-                    lastError: "Enqueue failed",
-                }).catch(e => console.error(e));
-                
-                return res.status(500).json({
-                    error: "queue_error",
-                });
-            }
-
-            await recordAuditLog({
-                workspaceId,
-                userId: req.user!.userId,
-                action: "DOCUMENT_UPLOADED",
-                resourceId: updated.id,
-                resourceName: updated.filename,
-                details: {
-                    sizeBytes: updated.sizeBytes,
-                    mimeType: updated.mimeType,
-                },
-            });
+          if (canonical) {
+            await deleteObject(document.storageKey).catch(e => console.error(e));
+            await DocumentRepository.delete(ctx, document.id).catch(e => console.error(e));
 
             return res.json({
-                documentId: updated.id,
-                status: "PROCESSING",
-                sha256: updated.sha256,
+              duplicate: true,
+              documentId: canonical.id,
+              canonicalDocumentId: canonical.id,
+              status: canonical.status,
+              sha256: canonical.sha256,
             });
-        } catch (err) {
-            next(err);
+          }
         }
-    },
+        throw dbErr;
+      }
+
+      let processingJob;
+      try {
+        processingJob = await ProcessingJobRepository.create(ctx, {
+          documentId: updated.id,
+          status: "QUEUED",
+          progress: 0,
+          progressMessage: "Job queued",
+        });
+      } catch (err) {
+        console.error(`Failed to create ProcessingJob for document ${updated.id}:`, err);
+        return res.status(500).json({
+          error: "internal_error",
+        });
+      }
+
+      try {
+        await documentProcessingQueue.add("process-document", {
+          documentId: updated.id,
+          workspaceId: updated.workspaceId,
+          processingJobId: processingJob.id,
+        }, {
+          jobId: processingJob.id,
+        });
+      } catch (err) {
+        console.error(`Failed to enqueue job for document ${updated.id}:`, err);
+        // Clean up the processing job if enqueue failed
+        await ProcessingJobRepository.update(ctx, processingJob.id, {
+          status: "FAILED",
+          lastError: "Enqueue failed",
+        }).catch(e => console.error(e));
+
+        return res.status(500).json({
+          error: "queue_error",
+        });
+      }
+      await dispatchDocumentProcessingWorkflow({
+        documentId: updated.id,
+      });
+
+      await recordAuditLog({
+        workspaceId,
+        userId: req.user!.userId,
+        action: "DOCUMENT_UPLOADED",
+        resourceId: updated.id,
+        resourceName: updated.filename,
+        details: {
+          sizeBytes: updated.sizeBytes,
+          mimeType: updated.mimeType,
+        },
+      });
+
+      return res.json({
+        documentId: updated.id,
+        status: "PROCESSING",
+        sha256: updated.sha256,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 );
 
 
 documentsRouter.get(
-    "/:workspaceId",
-    requireAuth,
-    requireWorkspaceRole("MEMBER"),
-    async (req: AuthedRequest, res, next) => {
-        try {
-            const workspaceId = req.params.workspaceId as string;
+  "/:workspaceId",
+  requireAuth,
+  requireWorkspaceRole("MEMBER"),
+  async (req: AuthedRequest, res, next) => {
+    try {
+      const workspaceId = req.params.workspaceId as string;
 
-            const documents = await DocumentRepository.list({ workspaceId });
+      const documents = await DocumentRepository.list({ workspaceId });
 
-            return res.json(documents);
-        } catch (err) {
-            next(err);
-        }
-    },
+      return res.json(documents);
+    } catch (err) {
+      next(err);
+    }
+  },
 );
 
 
@@ -515,7 +518,7 @@ documentsRouter.post(
 
       // 2. Call indexDocument orchestration
       const result = await indexDocument(documentId, workspaceId, provider, prisma);
-      
+
       if (!result.ok) {
         if (result.error === "document_not_found" || result.error === "wrong_workspace") {
           // Do not leak cross-workspace document existence
@@ -710,9 +713,9 @@ documentsRouter.post(
           const streamIterable = provider.chatStream
             ? provider.chatStream({ systemPrompt, userPrompt })
             : (async function* () {
-                const fullText = await provider!.chat({ systemPrompt, userPrompt });
-                yield fullText;
-              })();
+              const fullText = await provider!.chat({ systemPrompt, userPrompt });
+              yield fullText;
+            })();
 
           let firstTokenProduced = false;
           for await (const chunk of streamIterable) {
