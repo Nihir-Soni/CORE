@@ -10,4 +10,16 @@ export const s3 = new S3Client({
     forcePathStyle: true,
 });
 
+export const s3Presigner = process.env.S3_PUBLIC_ENDPOINT
+    ? new S3Client({
+        endpoint: process.env.S3_PUBLIC_ENDPOINT,
+        region: "us-east-1",
+        credentials: {
+            accessKeyId: process.env.S3_ACCESS_KEY!,
+            secretAccessKey: process.env.S3_SECRET_KEY!,
+        },
+        forcePathStyle: true,
+    })
+    : s3;
+
 export const BUCKET = process.env.S3_BUCKET ?? "core-documents";

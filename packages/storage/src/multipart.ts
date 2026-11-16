@@ -6,7 +6,7 @@ import {
   ListPartsCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3, BUCKET } from "./client.js";
+import { s3, s3Presigner, BUCKET } from "./client.js";
 import { Readable } from "node:stream";
 
 export async function initiateMultipartUpload(key: string, contentType: string): Promise<{ uploadId: string }> {
@@ -130,5 +130,5 @@ export async function presignUploadPart(
     PartNumber: partNumber,
   });
 
-  return getSignedUrl(s3, command, { expiresIn: expiresInSeconds });
+  return getSignedUrl(s3Presigner, command, { expiresIn: expiresInSeconds });
 }
